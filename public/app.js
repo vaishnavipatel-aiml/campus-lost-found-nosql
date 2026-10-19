@@ -44,12 +44,60 @@ async function loadItems() {
     const all = await api('/api/items?type=all&status=all'); $('statLost').textContent = all.items.filter(x=>x.type==='lost').length; $('statFound').textContent = all.items.filter(x=>x.type==='found').length;
   } catch (e) { $('itemGrid').innerHTML = `<div class="loading-card">${escapeHtml(e.message)}<br><br><button class="btn btn-outline" onclick="loadItems()">Try again</button></div>`; $('resultsCount').textContent = 'Listings unavailable'; }
 }
-function itemCard(item,index) {
-  const status = item.status || 'Open'; const canClaim = item.type === 'found' && status === 'Open' && state.user && String(item.reporter?._id || item.reporter) !== String(state.user.id);
-  const action = item.type === 'found' ? (status === 'Open' ? (state.user ? (canClaim ? `<button class="card-action" data-action="claim" data-id="${item._id}">Claim item ↗</button>` : `<button class="card-action" data-action="details" data-id="${item._id}">View details ↗</button>`) : `<button class="card-action" data-action="signin">Sign in to claim ↗</button>`) : `<button class="card-action" data-action="details" data-id="${item._id}">View details ↗</button>`) : `<button class="card-action" data-action="details" data-id="${item._id}">View details ↗</button>`;
-  const img = item.image && /^https?:\/\//i.test(item.image) ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.remove()">` : '';
-  return `<article class="item-card"><div class="item-visual tone-${index%5}"><span class="type-pill ${item.type}">${item.type==='lost'?'LOST ITEM':'FOUND ITEM'}</span><span class="status-pill ${statusClass(status)}">${escapeHtml(status.toUpperCase())}</span><span class="visual-emoji">${itemEmoji(item)}</span>${img}</div><div class="item-body"><div class="item-category">${escapeHtml(item.category)}</div><h3 title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h3><p class="item-description">${escapeHtml(item.description)}</p><div class="item-meta"><span class="pin">⌖</span><span>${escapeHtml(item.location)}</span><span>·</span><span>${dateText(item.date)}</span></div><div class="item-footer"><span class="reporter">Posted by ${escapeHtml(item.reporter?.name || `Student ${item.reg_no}`)}</span>${action}</div></div></article>`;
+
+function itemCard(item, index) {
+  const type = String(item.type || '').trim().toLowerCase();
+  const status = String(item.status || 'Open').trim().toLowerCase();
+
+  const reporterId = String(
+    item.reporter?._id || item.reporter?.id || item.reporter || ''
+  );
+
+  const userId = String(
+    state.user?._id || state.user?.id || ''
+  );
+
+  const isFound = type === 'found';
+  const isOpen = status === 'open';
+  const isOwnItem = Boolean(userId && reporterId && userId === reporterId);
+
+  let action;
+
+  if (isFound && isOpen && state.user && !isOwnItem) {
+    action = `<button class="card-action" data-action="claim" data-id="${item._id}">Claim item ↗</button>`;
+  } else {
+    action = `<button class="card-action" data-action="details" data-id="${item._id}">View details ↗</button>`;
+  }
+
+  const img = item.image && /^https?:\/\//i.test(item.image)
+    ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.remove()">`
+    : '';
+
+  return `<article class="item-card">
+    <div class="item-visual tone-${index % 5}">
+      <span class="type-pill ${type}">${isFound ? 'FOUND ITEM' : 'LOST ITEM'}</span>
+      <span class="status-pill ${statusClass(item.status || 'Open')}">${escapeHtml(String(item.status || 'Open').toUpperCase())}</span>
+      <span class="visual-emoji">${itemEmoji(item)}</span>
+      ${img}
+    </div>
+    <div class="item-body">
+      <div class="item-category">${escapeHtml(item.category)}</div>
+      <h3 title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h3>
+      <p class="item-description">${escapeHtml(item.description)}</p>
+      <div class="item-meta">
+        <span class="pin">⌖</span>
+        <span>${escapeHtml(item.location)}</span>
+        <span>·</span>
+        <span>${dateText(item.date)}</span>
+      </div>
+      <div class="item-footer">
+        <span class="reporter">Posted by ${escapeHtml(item.reporter?.name || `Student ${item.reg_no}`)}</span>
+        ${action}
+      </div>
+    </div>
+  </article>`;
 }
+
 function authModal(mode='login') {
   const isRegister = mode === 'register';
   showModal(`<div class="modal-kicker">WELCOME TO FOUNDRY</div><h2 id="modalTitle">${isRegister?'Create your account.':'Good to have you back.'}</h2><p class="modal-intro">${isRegister?'Join your campus community and help lost things find their way home.':'Sign in to post a report, submit a claim or track your activity.'}</p><form id="authForm"><div id="authError"></div>${isRegister?`<div class="form-grid"><div class="field"><label for="regNo">Registration number *</label><input id="regNo" name="reg_no" required placeholder="e.g. 202401"></div><div class="field"><label for="fullName">Full name *</label><input id="fullName" name="name" required placeholder="Your full name"></div></div>`:''}<div class="field"><label for="email">Campus email *</label><input id="email" name="email" type="email" required autocomplete="email" placeholder="you@campus.edu"></div>${isRegister?`<div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" type="tel" placeholder="Contact number"></div>`:''}<div class="field"><label for="password">Password *</label><input id="password" name="password" type="password" required minlength="8" autocomplete="${isRegister?'new-password':'current-password'}" placeholder="${isRegister?'At least 8 characters':'Your password'}"></div><button class="btn btn-primary form-submit" type="submit">${isRegister?'Create account':'Sign in'} ↗</button></form><div class="modal-switch">${isRegister?'Already registered?':'New to campus Foundry?'} <button id="switchAuth">${isRegister?'Sign in':'Create an account'}</button></div>`);
