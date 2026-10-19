@@ -112,9 +112,73 @@ function reportModal() {
   showModal(`<div class="modal-kicker">ADD TO THE COMMUNITY BOARD</div><h2 id="modalTitle">Report an item.</h2><p class="modal-intro">The more detail you share, the easier it is for the right person to recognise it.</p><form id="reportForm"><div id="reportError"></div><div class="form-grid"><div class="field"><label for="reportType">I'm reporting a *</label><select id="reportType" name="type" required><option value="lost">Lost item</option><option value="found">Found item</option></select></div><div class="field"><label for="reportCategory">Category *</label><select id="reportCategory" name="category" required><option>Accessories</option><option>Electronics</option><option>Documents</option><option>Bags</option><option>Keys</option><option>Books</option><option>Clothing</option><option>Other</option></select></div><div class="field full"><label for="reportName">Item name *</label><input id="reportName" name="name" required maxlength="120" placeholder="e.g. Navy blue backpack"></div><div class="field full"><label for="reportDescription">Description *</label><textarea id="reportDescription" name="description" required maxlength="1200" placeholder="Colour, brand, identifying marks or anything helpful…"></textarea></div><div class="field"><label for="reportLocation">Last seen / found at *</label><input id="reportLocation" name="location" required placeholder="e.g. Central Library"></div><div class="field"><label for="reportDate">Date *</label><input id="reportDate" name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></div><div class="field full"><label for="reportImage">Image URL (optional)</label><input id="reportImage" name="image" type="url" placeholder="https://…"></div></div><button class="btn btn-primary form-submit" type="submit">Publish report ↗</button></form>`);
   $('reportForm').onsubmit = async e => {e.preventDefault();const payload=Object.fromEntries(new FormData(e.currentTarget).entries());const btn=e.currentTarget.querySelector('button[type=submit]');btn.disabled=true;btn.textContent='Publishing…';try{await api('/api/items',{method:'POST',body:JSON.stringify(payload)});closeModal();toast('Report published successfully.');await loadItems();if(state.view==='activity')loadActivity();}catch(err){$('reportError').innerHTML=errorBox(err.message);btn.disabled=false;btn.textContent='Publish report ↗';}};
 }
+
 async function detailsModal(id) {
-  try {const {item}=await api(`/api/items/${encodeURIComponent(id)}`);showModal(`<div class="modal-kicker">${item.type==='lost'?'LOST ITEM':'FOUND ITEM'} · ${escapeHtml(item.status)}</div><div class="detail-modal-emoji">${itemEmoji(item)}</div><h2>${escapeHtml(item.name)}</h2><p class="modal-intro">${escapeHtml(item.description)}</p><div class="detail-info"><div><small>CATEGORY</small><b>${escapeHtml(item.category)}</b></div><div><small>REPORTED ON</small><b>${dateText(item.date)}</b></div><div><small>LOCATION</small><b>${escapeHtml(item.location)}</b></div><div><small>REPORTED BY</small><b>${escapeHtml(item.reporter?.name || item.reg_no)}</b></div></div>${item.image&&/^https?:\/\//i.test(item.image)?`<p><a class="text-link" href="${escapeHtml(item.image)}" target="_blank" rel="noopener">Open item image ↗</a></p>`:''}${item.type==='found'&&item.status==='Open'&&state.user&&String(item.reporter?._id)!==String(state.user.id)?`<button class="btn btn-primary form-submit" data-action="claim" data-id="${item._id}">Submit a claim ↗</button>`:''}`);}
-  catch(e){toast(e.message,'error');}
+  try {
+    const { item } = await api(`/api/items/${encodeURIComponent(id)}`);
+
+    const type = String(item.type || '').trim().toLowerCase();
+    const status = String(item.status || '').trim().toLowerCase();
+
+    const reporterId = String(
+      item.reporter?._id || item.reporter?.id || item.reporter || ''
+    );
+
+    const userId = String(
+      state.user?._id || state.user?.id || state.user?.userId || ''
+    );
+
+    const canClaim =
+      type === 'found' &&
+      status === 'open' &&
+      Boolean(state.user) &&
+      Boolean(userId) &&
+      reporterId !== userId;
+
+    showModal(`
+      <div class="modal-kicker">
+        ${type === 'lost' ? 'LOST ITEM' : 'FOUND ITEM'} ·
+        ${escapeHtml(item.status || 'Open')}
+      </div>
+
+      <div class="detail-modal-emoji">${itemEmoji(item)}</div>
+      <h2>${escapeHtml(item.name)}</h2>
+      <p class="modal-intro">${escapeHtml(item.description)}</p>
+
+      <div class="detail-info">
+        <div><small>CATEGORY</small><b>${escapeHtml(item.category)}</b></div>
+        <div><small>REPORTED ON</small><b>${dateText(item.date)}</b></div>
+        <div><small>LOCATION</small><b>${escapeHtml(item.location)}</b></div>
+        <div><small>REPORTED BY</small><b>${escapeHtml(item.reporter?.name || item.reg_no || 'Student')}</b></div>
+      </div>
+
+      ${
+        item.image && /^https?:\/\//i.test(item.image)
+          ? `<p><a class="text-link" href="${escapeHtml(item.image)}" target="_blank" rel="noopener">Open item image ↗</a></p>`
+          : ''
+      }
+
+      ${
+        canClaim
+          ? `<button class="btn btn-primary form-submit" data-action="claim" data-id="${escapeHtml(item._id)}">Submit a claim ↗</button>`
+          : state.user
+            ? `<p class="modal-intro">${
+                type !== 'found'
+                  ? 'Claims are available for found items only.'
+                  : status !== 'open'
+                    ? 'This item is no longer open for claims.'
+                    : !userId
+                      ? 'Unable to verify your account. Please sign in again.'
+                      : 'You cannot claim an item you reported yourself.'
+              }</p>`
+            : `<p class="modal-intro">Sign in to submit a claim for this item.</p>`
+      }
+    `);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
 }
 function claimModal(id) {
   if (!state.user) return authModal();
